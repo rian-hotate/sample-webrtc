@@ -1,0 +1,18 @@
+version: '2'
+
+services:
+  web:
+    container_name: web
+    build: ./webapp
+    working_dir: "/usr/src/app"
+    ports:
+      - "3000:3000"
+    volumes:
+      - './webapp/src:/usr/src/app:z'
+    links:
+      - redis
+    command: node app.js
+
+  redis:
+    container_name: redis
+    image: redis:latest
