@@ -4,15 +4,17 @@ services:
   web:
     container_name: web
     build: ./webapp
-    working_dir: "/usr/src/app"
     ports:
+      - "80:80"
+    volumes:
+      - './webapp/src:/usr/local/apache2/htdocs/:z'
+
+  signaling:
+    container_name: signaling
+    build: .
+    working_dir: "/usr/src/signaling"
+    ports: 
       - "3000:3000"
     volumes:
-      - './webapp/src:/usr/src/app:z'
-    links:
-      - redis
-    command: node app.js
-
-  redis:
-    container_name: redis
-    image: redis:latest
+      - "./signaling:/usr/src/signaling:z"
+    command: node signaling.js
