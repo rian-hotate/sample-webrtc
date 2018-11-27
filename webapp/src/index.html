@@ -13,11 +13,16 @@
     &nbsp;
     <button type="button" onclick="connect();">Connect</button>
     <button type="button" onclick="hangUp();">Hang Up</button> 
-    <button type="button" onclick="send();">send</button> 
     <div>
       <video id="local_video" autoplay style="width: 160px; height: 120px; border: 1px solid black;"></video>
     </div>
     <div id="container">
     </div>
+    <div id="chat_area">
+    </div>
+    <form id="send_message">
+      <input id="message" type="text"/>
+      <button type="button" onclick="send();">send</button> 
+    </form>
   </body>
 </html>

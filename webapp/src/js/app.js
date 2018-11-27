@@ -31,7 +31,15 @@ RTCSessionDescription = window.RTCSessionDescription || window.webkitRTCSessionD
 // ----- use socket.io ---
 let port = 3000;
 let socket = io.connect('http://localhost:' + port + '/');
-let room = getRoomName();
+let param = getParam();
+let room = '';
+let myInfo = param['name']
+if (!param['room']) {
+  room = '_testRoom';
+} else {
+  room = param['room'];
+}
+
 socket.on('connect', function(evt) {
   console.log('socket.io connected. enter room=' + room );
   socket.emit('enter', room);
@@ -39,6 +47,7 @@ socket.on('connect', function(evt) {
 socket.on('message', function(message) {
   console.log('message:', message);
   let fromId = message.from;
+  param['id'] = message.sendto;
 
   if (message.type === 'offer') {
     // -- got offer ---
@@ -96,16 +105,24 @@ function emitTo(id, msg) {
 }
 
 // -- room名を取得 --
-function getRoomName() { // たとえば、 URLに  ?roomname  とする
+function getParam() { // たとえば、 URLに  ?roomname  とする
   let url = document.location.href;
   let args = url.split('?');
   if (args.length > 1) {
-    let room = args[1];
-    if (room != '') {
-      return room;
+    let args_list = args[1].split('&');
+    var param = new Object();
+    for (var i = 0; i < args_list.length; i++) {
+      // パラメータ名とパラメータ値に分割する
+      var element = args_list[i].split('=');
+
+      var paramName = decodeURIComponent(element[0]);
+      var paramValue = decodeURIComponent(element[1]);
+
+      // パラメータ名をキーとして連想配列に追加する
+      param[paramName] = decodeURIComponent(paramValue);
     }
   }
-  return '_testroom';
+  return param;
 }
 
 // ---- for multi party -----
@@ -288,22 +305,13 @@ function pauseVideo(element) {
 
 function sendSdp(id, sessionDescription) {
   console.log('---sending sdp ---');
-  /*---
-    textForSendSdp.value = sessionDescription.sdp;
-    textForSendSdp.focus();
-    textForSendSdp.select();
-    ----*/
   let message = { type: sessionDescription.type, sdp: sessionDescription.sdp };
   console.log('sending SDP=' + message);
-  //ws.send(message);
   emitTo(id, message);
 }
 function sendIceCandidate(id, candidate) {
   console.log('---sending ICE candidate ---');
   let obj = { type: 'candidate', ice: candidate };
-  //let message = JSON.stringify(obj);
-  //console.log('sending candidate=' + message);
-  //ws.send(message);
   if (isConnectedWith(id)) {
     emitTo(id, obj);
   } else {
@@ -323,7 +331,6 @@ function prepareNewConnection(id) {
       if (isRemoteVideoAttached(id)) {
         console.log('stream already attached, so ignore');
       } else {
-        //playVideo(remoteVideo, stream);
         attachVideo(id, stream);
       }
     };
@@ -331,7 +338,6 @@ function prepareNewConnection(id) {
     peer.onaddstream = function(event) {
       let stream = event.stream;
       console.log('-- peer.onaddstream() stream.id=' + stream.id);
-      //playVideo(remoteVideo, stream);
       attachVideo(id, stream);
     };
   }
@@ -342,13 +348,8 @@ function prepareNewConnection(id) {
       console.log(evt.candidate);
       // Trickle ICE の場合は、ICE candidateを相手に送る
       sendIceCandidate(id, evt.candidate);
-      // Vanilla ICE の場合には、何もしない
     } else {
       console.log('empty ice event');
-      // Trickle ICE の場合は、何もしない
-
-      // Vanilla ICE の場合には、ICE candidateを含んだSDPを相手に送る
-      //sendSdp(id, peer.localDescription);
     }
   };
 
@@ -368,7 +369,6 @@ function prepareNewConnection(id) {
     console.log('== ice connection status=' + peer.iceConnectionState);
     if (peer.iceConnectionState === 'disconnected') {
       console.log('-- disconnected --');
-      //hangUp();
       stopConnection(id);
     }
   };
@@ -381,7 +381,6 @@ function prepareNewConnection(id) {
   };
   peer.onremovestream = function(event) {
     console.log('-- peer.onremovestream()');
-    //pauseVideo(remoteVideo);
     deleteRemoteStream(id);
     detachVideo(id);
   };
@@ -409,12 +408,15 @@ function makeOffer(id) {
       console.log('setLocalDescription() succsess in promise');
       // -- Trickle ICE の場合は、初期SDPを相手に送る -- 
       sendSdp(id, peerConnection.localDescription);
-      // -- Vanilla ICE の場合には、まだSDPは送らない --
     }).catch(function(err) {
       console.error(err);
     });
   dataChannel[id].onmessage = function (event) {
-    console.log("received: " + event.data);
+    let chatArea = document.getElementById('chat_area');
+    let text = document.createElement('p');
+    let param = JSON.parse(event.data)
+    text.innerText = param.message;
+    chatArea.appendChild(text);
   };
   
   dataChannel[id].onopen = function () {
@@ -423,12 +425,6 @@ function makeOffer(id) {
 
 }
 function setOffer(id, sessionDescription) {
-  /*
-    if (peerConnection) {
-      console.error('peerConnection alreay exist!');
-    }
-    */
-
   _assert('setOffer must not connected yet', (! isConnectedWith(id)) );    
   let peerConnection = prepareNewConnection(id);
   addConnection(id, peerConnection);
@@ -460,7 +456,11 @@ function makeAnswer(id) {
         dataChannel[id] = evt.channel;
 
         dataChannel[id].onmessage = function (event) {
-          console.log("received: " + event.data);
+          let chatArea = document.getElementById('chat_area');
+          let text = document.createElement('p');
+          let param = JSON.parse(event.data)
+          text.innerText = param.message;
+          chatArea.appendChild(text);
         };
   
         dataChannel[id].onopen = function () {
@@ -535,9 +535,19 @@ setTimeout(() => {
 }, 1000)
 
 function send(){
-  console.log(dataChannel);
   Object.keys(dataChannel).forEach(function(key) {
-    dataChannel[key].send("Hello World!!");
-    console.log("aaaa");
+    var message = document.forms.send_message.message.value
+    let send_param = { 
+      'id' : param.id,
+      'name' : param.name,
+      'message' : message
+    }
+    dataChannel[key].send(JSON.stringify(send_param));
+
+    let chatArea = document.getElementById('chat_area');
+    let text = document.createElement('p');
+    text.innerText = message;
+    chatArea.appendChild(text);
+
   });
 }
