@@ -32,13 +32,8 @@ RTCSessionDescription = window.RTCSessionDescription || window.webkitRTCSessionD
 let port = 3000;
 let socket = io.connect('http://localhost:' + port + '/');
 let param = getParam();
-let room = '';
-let myInfo = param['name']
-if (!param['room']) {
-  room = '_testRoom';
-} else {
-  room = param['room'];
-}
+let room = param['room'];
+let connecter_info = {};
 
 socket.on('connect', function(evt) {
   console.log('socket.io connected. enter room=' + room );
@@ -47,7 +42,12 @@ socket.on('connect', function(evt) {
 socket.on('message', function(message) {
   console.log('message:', message);
   let fromId = message.from;
-  param['id'] = message.sendto;
+  if (message.sendto) {
+    param['id'] = message.sendto;
+    if (!param['name']) {
+      param['name'] = 'guest_' + param['id'].substr(0, 4);
+    }
+  }
 
   if (message.type === 'offer') {
     // -- got offer ---
@@ -108,9 +108,9 @@ function emitTo(id, msg) {
 function getParam() { // たとえば、 URLに  ?roomname  とする
   let url = document.location.href;
   let args = url.split('?');
+  var param = new Object();
   if (args.length > 1) {
     let args_list = args[1].split('&');
-    var param = new Object();
     for (var i = 0; i < args_list.length; i++) {
       // パラメータ名とパラメータ値に分割する
       var element = args_list[i].split('=');
@@ -121,6 +121,9 @@ function getParam() { // たとえば、 URLに  ?roomname  とする
       // パラメータ名をキーとして連想配列に追加する
       param[paramName] = decodeURIComponent(paramValue);
     }
+  }
+  if (!param['room']) {
+    param['room'] = '_testRoom';
   }
   return param;
 }
@@ -412,15 +415,70 @@ function makeOffer(id) {
       console.error(err);
     });
   dataChannel[id].onmessage = function (event) {
-    let chatArea = document.getElementById('chat_area');
-    let text = document.createElement('p');
-    let param = JSON.parse(event.data)
-    text.innerText = param.message;
-    chatArea.appendChild(text);
+    let msg = JSON.parse(event.data)
+    if (msg['type'] == 'chat') {
+      let chatArea = document.getElementById('chat_area');
+      let text = document.createElement('p');
+      text.innerText = msg['message'];
+      chatArea.appendChild(text);
+    } else if (msg['type'] == 'info') {
+      let num = id
+      connecter_info[id] = {
+        'id' : msg['id'],
+        'name' : msg['name']
+      }
+
+      let connecter = document.getElementById('connecter');
+      let name = document.createElement('button');
+      name.setAttribute('id', id);
+      name.setAttribute('type', 'button');
+      name.innerText = msg['name'];
+      connecter.appendChild(name);
+
+      let whispper_area = document.getElementById('whispper_area');
+      let div = document.createElement('div');
+      div.setAttribute('id', 'whisp_' + id);
+      div.setAttribute('style', 'display:none');
+      whispper_area.appendChild(div);
+      name.addEventListener('click', function() { active_whisp(num) });
+
+      let msg_div = document.createElement('div');
+      msg_div.setAttribute('id', 'whisp_msg_' + id);
+      div.appendChild(msg_div);
+
+      let form = document.createElement('form');
+      form.setAttribute('id', 'whisp_form_' + id);
+      div.appendChild(form);
+
+      let input = document.createElement('input');
+      input.setAttribute('id', 'whisp_send_'+id);
+      input.setAttribute('type', 'text');
+      form.appendChild(input);
+
+      let button = document.createElement('button');
+      button.setAttribute('type', 'button');
+      button.addEventListener('click', function() { private_send(num) });
+      button.innerText = 'whisp';
+      form.appendChild(button);
+
+    } else if (msg['type'] == 'whisp') {
+      active_whisp(msg['id']);
+      let whispArea = document.getElementById('whisp_msg_' + msg['id']);
+      let text = document.createElement('p');
+      text.innerText = msg['message'];
+      whispArea.appendChild(text);
+    }
   };
   
   dataChannel[id].onopen = function () {
     console.log("datachannel open");
+    let send_param = { 
+      'type' : 'info',
+      'id' : param['id'],
+      'name' : param['name'],
+    }
+    dataChannel[id].send(JSON.stringify(send_param));
+
   };
 
 }
@@ -456,15 +514,69 @@ function makeAnswer(id) {
         dataChannel[id] = evt.channel;
 
         dataChannel[id].onmessage = function (event) {
-          let chatArea = document.getElementById('chat_area');
-          let text = document.createElement('p');
-          let param = JSON.parse(event.data)
-          text.innerText = param.message;
-          chatArea.appendChild(text);
+          let msg = JSON.parse(event.data)
+          if (msg['type'] == 'chat') {
+            let chatArea = document.getElementById('chat_area');
+            let text = document.createElement('p');
+            text.innerText = msg['message'];
+            chatArea.appendChild(text);
+          } else if (msg['type'] == 'info') {
+            let num = id
+            connecter_info[id] = {
+              'id' : msg['id'],
+              'name' : msg['name']
+            }
+
+            let connecter = document.getElementById('connecter');
+            let name = document.createElement('button');
+            name.setAttribute('id', id);
+            name.setAttribute('type', 'button');
+            name.innerText = msg['name'];
+            connecter.appendChild(name);
+
+            let whispper_area = document.getElementById('whispper_area');
+            let div = document.createElement('div');
+            div.setAttribute('id', 'whisp_' + id);
+            div.setAttribute('style', 'display:none');
+            whispper_area.appendChild(div);
+            name.addEventListener('click', function() { active_whisp(num) });
+
+            let msg_div = document.createElement('div');
+            msg_div.setAttribute('id', 'whisp_msg_' + id);
+            div.appendChild(msg_div);
+
+            let form = document.createElement('form');
+            form.setAttribute('id', 'whisp_form_' + id);
+            div.appendChild(form);
+
+            let input = document.createElement('input');
+            input.setAttribute('id', 'whisp_send_'+id);
+            input.setAttribute('type', 'text');
+            form.appendChild(input);
+
+            let button = document.createElement('button');
+            button.setAttribute('type', 'button');
+            button.addEventListener('click', function() { private_send(num) });
+            button.innerText = 'whisp';
+            form.appendChild(button);
+
+          } else if (msg['type'] == 'whisp') {
+            active_whisp(msg['id']);
+            let whispArea = document.getElementById('whisp_msg_' + msg['id']);
+            let text = document.createElement('p');
+            text.innerText = msg['message'];
+            whispArea.appendChild(text);
+	  }
         };
   
         dataChannel[id].onopen = function () {
           console.log("datachannel open");
+          let send_param = { 
+            'type' : 'info',
+            'id' : param['id'],
+            'name' : param['name'],
+          }
+          dataChannel[id].send(JSON.stringify(send_param));
         };
       };
       return peerConnection.setLocalDescription(sessionDescription);
@@ -534,12 +646,13 @@ setTimeout(() => {
   connect();
 }, 1000)
 
-function send(){
+function send() {
   Object.keys(dataChannel).forEach(function(key) {
     var message = document.forms.send_message.message.value
     let send_param = { 
-      'id' : param.id,
-      'name' : param.name,
+      'type' : 'chat',
+      'id' : param['id'],
+      'name' : param['name'],
       'message' : message
     }
     dataChannel[key].send(JSON.stringify(send_param));
@@ -547,7 +660,28 @@ function send(){
     let chatArea = document.getElementById('chat_area');
     let text = document.createElement('p');
     text.innerText = message;
-    chatArea.appendChild(text);
+    chatArea.appendChild(tex);
 
   });
+}
+
+function private_send(num) {
+  var message = document.forms['whisp_form_'+num].elements['whisp_send_'+num].value
+  let send_param = { 
+    'type' : 'whisp',
+    'id' : param['id'],
+    'name' : param['name'],
+    'message' : message
+  }
+  dataChannel[connecter_info[num].id].send(JSON.stringify(send_param));
+
+  let whispArea = document.getElementById('whisp_msg_' + num);
+  let text = document.createElement('p');
+  text.innerText = message;
+  whispArea.appendChild(text);
+}
+
+function active_whisp(num) {
+  let target = document.getElementById('whisp_' + num);
+  target.setAttribute('style', 'display:inline');
 }
