@@ -30,7 +30,7 @@ RTCSessionDescription = window.RTCSessionDescription || window.webkitRTCSessionD
 
 // ----- use socket.io ---
 let port = 3000;
-let socket = io.connect('http://localhost:' + port + '/', {transports: ['websocket', 'polling', 'flashsocket']});
+let socket = io.connect('https://cd803b76.ngrok.io/', {transports: ['websocket', 'polling', 'flashsocket']});
 let param = getParam();
 let room = param['room'];
 let connecter_info = {};
@@ -241,7 +241,8 @@ function startVideo() {
   getDeviceStream({video: true, audio: true}) // audio: false <-- ontrack once, audio:true --> ontrack twice!!
     .then(function (stream) { // success
       let localVideo = document.getElementById('local_video');
-      target.setAttribute('style', 'width: 160px; height: 120px; border: 1px solid black; display:inline');
+      localVideo.setAttribute('style', 'width: 160px; height: 120px; border: 1px solid black; display:inline');
+      localVideo.setAttribute('autoplay', true);
       localStream = stream;
       playVideo(localVideo, stream);
     }).catch(function (error) { // error
@@ -326,7 +327,11 @@ function sendIceCandidate(id, candidate) {
 
 // ---------------------- connection handling -----------------------
 function prepareNewConnection(id) {
-  let pc_config = {"iceServers":[]};
+  let pc_config = {"iceServers":[
+    {"urls": "stun:stun.l.google.com:19302"},
+    {"urls": "stun:stun1.l.google.com:19302"},
+    {"urls": "stun:stun2.l.google.com:19302"}
+  ]};
   let peer = new RTCPeerConnection(pc_config);
   // --- on get remote stream ---
   if ('ontrack' in peer) {
@@ -611,8 +616,8 @@ function deleteChat(id) {
 }
 
 function send() {
+  var message = document.forms.send_message.message.value
   Object.keys(dataChannel).forEach(function(key) {
-    var message = document.forms.send_message.message.value
     let send_param = { 
       'type' : 'chat',
       'id' : param['id'],
@@ -621,11 +626,11 @@ function send() {
     }
     dataChannel[key].send(JSON.stringify(send_param));
 
+  });
     let chatArea = document.getElementById('chat_area');
     let text = document.createElement('p');
     text.innerText = message;
     chatArea.appendChild(text);
-  });
 }
 
 function private_send(num) {
